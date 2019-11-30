@@ -18,7 +18,7 @@
 typedef enum
 {
 	TG_NOTICE_STR = 0,
-	TG_WARN_ST,  
+	TG_WARN_STR,  
 	TG_ERROR_STR, 
   TG_NOT_NOCR,
   TG_WAR_NOCR,
@@ -44,40 +44,49 @@ class serOBD_simple
       _stream = &serialPort;
     }
 
-    void begin(uint32_t baudRate, Print  &log_device){
-      //Log.begin(LOG_LEVEL_VERBOSE, &Serial);
-      Log.begin(LOG_LEVEL_WARNING, &log_device);
-      //Log.begin(LOG_LEVEL_WARNING, &obd_nlogger);
-      Log.warning("OBD Class Logging begin completed" CR);    
+    void begin(uint32_t baudRate, Logging logger){
+      //Log.begin(LOG_LEVEL_VERBOSE, &log_device);
+      //Log.begin(LOG_LEVEL_WARNING, &log_device);
+      //Log.begin(LOG_LEVEL_SILENT, &log_device);
+      _logger = logger;
+      _logger.warning("OBD Class Logging begin completed" CR);    
 }
+    void f_log(char err_str[], tgerr_type etype,const char c_from[]="Oh FUCK");
     uint8_t getPID(char gpid[]);
     void flush_buffer(void);
     uint8_t elm_setup(void);
-  
+    uint8_t snd_PID(const char gpid[], uint8_t bresp = 1);
+    uint8_t get_hungbit(void);
+    int get_err_rate(void);
+    uint8_t clr_err_rate(void);
   // library-accessible "private" interface
   private:
     //int value;
-    HardwareSerial* hwStream;
+    //HardwareSerial* hwStream;
     //SoftwareSerial* swStream;
     Stream* _stream;
-    const char _reset = 'ATZ';
-    const char _echo_off = 'ATE0';
-    const char _hdrs_off = 'ATH0';
-    const char _lnfd_off = 'ATL0';
-    const char _space_off = 'ATS0';
-    const char _set_adaptive_timing = 'ATAT2';
-    const char _ford_protocol = 'ATTP1';
-    const char _connection_test = '0100';
+    Logging _logger;
+    char const* _reset = "ATZ";
+    char const* _echo_off = "ATE0";
+    char const* _hdrs_off = "ATH0";
+    char const* _lnfd_off = "ATL0";
+    char const* _space_off = "ATS0";
+    char const* _set_adaptive_timing = "ATAT2";
+    char const* _ford_protocol = "ATTP1";
+    char const* _connection_test = "0100";
     char _response[32];
-    int pidreadcounter = 0;
+    int _pidreadcounter = 0;
+    uint8_t _setup_complete=0;
+    uint8_t _obd_hung = 0;
     CircularBuffer<char,150> _readings;
-    void f_log(char err_str[], tgerr_type etype, const char c_from[]="Oh FUCK"){
-    void set_proto(void);
-    uint8_t snd_cmd(char cmd[]);
-    uint8_t verify_cmdresp(char chkval[]="OK");
-    uint8_t verify_pidresp();
-    void buff_resp();
+    uint8_t set_proto(void);
+    uint8_t snd_cmd(const char cmd[]);
+    uint8_t verify_resp(char chkval[]="OK", char read_type[]="Command", uint8_t match=0);
+    //uint8_t verify_pidresp();
+    void buff_resp(uint8_t rdlen);
     int get_response(const char c_from[] = "Oh FUCK", char msg[] = "Not Provided");
+    int _pidzero_err_cnt = 0;
+    int _err_counter = 0;
 };
 
 #endif
