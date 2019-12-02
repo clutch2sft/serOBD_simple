@@ -1,26 +1,22 @@
 /*
-  Test.h - Test library for Wiring - implementation
-  Copyright (c) 2006 John Doe.  All right reserved.
+  serOBD_simple.h - library for simple OBD shit - implementation
+  started from Test.cpp example
+  Copyright (c) 2019 Trip-g.com LLC.  All right reserved.
+  tg@trip-g.com
 */
-
-// includeAPI
 
 // include this library's description file
 #include "serOBD_simple.h"
 
 // include description files for other libraries used (if any)
-//LDudp obd_nlogger = LDudp();
-
-// setup a serial buffer for me to used
-
 
 
 // Constructor /////////////////////////////////////////////////////////////////
-// Function that handles the creation and setup of instances
+
 
 
 // Public Methods //////////////////////////////////////////////////////////////
-// Functions available in Wiring sketches, this library, and other libraries
+
 /*
 void serOBD_simple::begin(uint32_t baudRate, HardwareSerial& log_device) {
     hwStream->begin(baudRate);
@@ -108,17 +104,37 @@ uint8_t serOBD_simple::clr_err_rate(void){
   return 1;
 }
 
+int serOBD_simple::get_mafbuf_size(void){
+  return _mafgps.size();
+}
+
+int serOBD_simple::get_spdbuf_size(void){
+  return _spd.size();
+}
+
+long serOBD_simple::get_mafbuf_data(void){
+  return _mafgps.shift();
+
+}
+int serOBD_simple::get_spdbuf_data(void){
+  return _spd.shift();
+}
+
 void serOBD_simple::flush_buffer(void){
   if (_pidreadcounter > 5) {
     f_log("Flush Buffer", TG_NOTICE_STR, __func__);
-    Log.warning("Pid Read Counter: %d" CR, _pidreadcounter);
-      while (!_readings.isEmpty()) {
+    _logger->warning("Pid Read Counter: %d" CR, _pidreadcounter);
+      while (!_mafgps.isEmpty()) {
         //f_log(_readings.shift(), TG_WAR_NOCR, __func__);
-        //Serial.print(_readings.shift());
-        _readings.shift();
+        Serial.print(_mafgps.shift());
+        //_mafgps.shift();
+      }
+      Serial.println(" MAF BUFFER_END");
+      while (!_spd.isEmpty()){
+        Serial.print(_spd.shift());
       }
       f_log(" BUFFER END", TG_WARN_STR, __func__);
-      //Serial.println(" BUFFER_END");
+      Serial.println(" SPD BUFFER_END");
   } else {
     _pidzero_err_cnt += 1;
   }
@@ -131,19 +147,19 @@ void serOBD_simple::flush_buffer(void){
 
 void serOBD_simple::f_log(char err_str[], tgerr_type etype,const char c_from[]){
   switch(etype) {
-    case (TG_NOTICE_STR): _logger.notice(F("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!%s--->>%s!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" CR), c_from, err_str) ; 
+    case (TG_NOTICE_STR): _logger->notice(F("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!%s--->>%s!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" CR), c_from, err_str) ; 
       break;
-    case (TG_WARN_STR):_logger.warning(F("###############################################%s--->>%s################################################" CR), c_from, err_str);
+    case (TG_WARN_STR):_logger->warning(F("###############################################%s--->>%s################################################" CR), c_from, err_str);
       break;
-    case (TG_ERROR_STR):_logger.error(F("************************************************%s--->>%s************************************************" CR), c_from, err_str) ;
+    case (TG_ERROR_STR):_logger->error(F("************************************************%s--->>%s************************************************" CR), c_from, err_str) ;
       break;
-    case (TG_NOT_NOCR):_logger.notice(F("%s"), c_from, err_str) ;
+    case (TG_NOT_NOCR):_logger->notice(F("%s"), c_from, err_str) ;
       break;
-    case (TG_WAR_NOCR):_logger.warning(F("%s"), c_from, err_str) ;
+    case (TG_WAR_NOCR):_logger->warning(F("%s"), c_from, err_str) ;
       break;
-    case (TG_ERR_NOCR):_logger.error(F("%s"), c_from, err_str) ;
+    case (TG_ERR_NOCR):_logger->error(F("%s"), c_from, err_str) ;
       break;
-    default:_logger.error(F("f_log Fucked Up missed all case statements!!!" CR) );
+    default:_logger->error(F("f_log Fucked Up missed all case statements!!!" CR) );
   }
   
 }
@@ -168,12 +184,35 @@ uint8_t serOBD_simple::snd_PID(const char gpid[], uint8_t bresp) {
 }
 void serOBD_simple::buff_resp(uint8_t rdlen){
   _pidreadcounter += 1;
-  for(int i=2; i<rdlen-2; i++){
-    _readings.push(_response[i]);
+  char lresponse[4];
+  if (_response[2] == '1' && _response[3] == '0'){ //chars 2&3 are 10 then we have MAF
+    _mafgps.push(calc_gpers());
+  } else if (_response[2] == '0' && _response[3] == 'D') { //chars 2&3 are 0D then we have MAF
+    f_log("Is SPD", TG_NOTICE_STR, __func__);
+    int spd = calc_spd(); 
+    _spd.push((int)spd);
   }
-  _readings.push('~');
+
 }
 
+int serOBD_simple::calc_spd() {
+  char *pEnd = NULL;
+  char tmpstr[4];
+  sprintf(tmpstr, "0x%c%c", _response[4], _response[5]);
+  long int a = strtol(tmpstr, &pEnd, 0);
+  return a * MPHfactor;
+}
+
+float serOBD_simple::calc_gpers() {
+  char *pEnd = NULL;
+  char tmpstr[4];
+  sprintf(tmpstr, "0x%c%c", _response[4], _response[5]);
+  long int a = strtol(tmpstr, &pEnd, 0);
+  sprintf(tmpstr, "0x%c%c", _response[6], _response[7]);
+  long int b = strtol(tmpstr, &pEnd, 0);
+  float gps = (((256*a)+b)/100);
+  return gps;
+}
 
 //Is matching the chkval good?  match = 1, If matching chkval is bad... match=0
 uint8_t serOBD_simple::verify_resp(char chkval[], char read_type[], uint8_t match) {  
